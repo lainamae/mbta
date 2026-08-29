@@ -1,0 +1,6 @@
+node_modules
+dist
+.npm-cache
+.npm-devdir
+.DS_Store
+*.local
