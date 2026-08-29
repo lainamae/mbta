@@ -1,0 +1,100 @@
+:root {
+  --ink: #142033;
+  --ink-muted: #3d4f66;
+  --paper: #f4f0e8;
+  --panel: #fffcf7;
+  --line: #cfc5b2;
+  --accent: #b3471a;
+  --accent-ink: #fffaf5;
+  --focus: #0b57d0;
+  --ok-bg: #e7f2eb;
+  --ok-ink: #1a4d32;
+  --sans: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --space: clamp(1rem, 4vw, 1.35rem);
+  --radius: 0.5rem;
+  --touch: 2.75rem;
+  color-scheme: light;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--sans);
+  font-size: 112.5%; /* 18px base — easier reading on phones */
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background:
+    linear-gradient(180deg, #faf7f0 0%, var(--paper) 40%, #ebe4d6 100%);
+}
+
+#app {
+  min-height: 100dvh;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+button,
+textarea,
+summary {
+  font: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space);
+  top: 0;
+  z-index: 10;
+  padding: 0.6rem 1rem;
+  background: var(--ink);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  transform: translateY(-120%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
