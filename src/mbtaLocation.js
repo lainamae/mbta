@@ -67,24 +67,31 @@ function matchScore(place, stopName) {
 async function fetchStopsForRoute(routeId) {
   if (routeStopsCache.has(routeId)) return routeStopsCache.get(routeId)
 
-  const params = new URLSearchParams({
-    'filter[route]': routeId,
-    'page[limit]': '200',
-  })
-  const res = await fetch(`${API}/stops?${params}`)
-  if (!res.ok) throw new Error(`MBTA stops failed (${res.status})`)
-  const json = await res.json()
-  const stops = (json.data || [])
-    .map((row) => ({
-      id: row.id,
-      name: row.attributes?.name || '',
-      lat: row.attributes?.latitude,
-      lon: row.attributes?.longitude,
-    }))
-    .filter((s) => typeof s.lat === 'number' && typeof s.lon === 'number')
+  const request = (async () => {
+    const params = new URLSearchParams({
+      'filter[route]': routeId,
+      'page[limit]': '200',
+    })
+    const res = await fetch(`${API}/stops?${params}`)
+    if (!res.ok) throw new Error(`MBTA stops failed (${res.status})`)
+    const json = await res.json()
+    return (json.data || [])
+      .map((row) => ({
+        id: row.id,
+        name: row.attributes?.name || '',
+        lat: row.attributes?.latitude,
+        lon: row.attributes?.longitude,
+      }))
+      .filter((s) => typeof s.lat === 'number' && typeof s.lon === 'number')
+  })()
 
-  routeStopsCache.set(routeId, stops)
-  return stops
+  routeStopsCache.set(routeId, request)
+  try {
+    return await request
+  } catch (error) {
+    routeStopsCache.delete(routeId)
+    throw error
+  }
 }
 
 /**
@@ -178,6 +185,50 @@ export function distanceMeters(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 
+/**
+ * Shortest distance from a location to a route path in meters.
+ * Uses a local equirectangular projection, which is accurate at MBTA scale.
+ */
+export function distanceToPathMeters(position, path) {
+  if (!position || !path?.length) return Infinity
+  if (path.length === 1) return distanceMeters(position, path[0])
+
+  const earthRadius = 6371000
+  const latitudeRadians = (position.lat * Math.PI) / 180
+  const toLocalPoint = (point) => ({
+    x:
+      ((point.lon - position.lon) * Math.PI * earthRadius *
+        Math.cos(latitudeRadians)) /
+      180,
+    y: ((point.lat - position.lat) * Math.PI * earthRadius) / 180,
+  })
+
+  let closest = Infinity
+  for (let index = 0; index < path.length - 1; index++) {
+    const start = toLocalPoint(path[index])
+    const end = toLocalPoint(path[index + 1])
+    const segmentX = end.x - start.x
+    const segmentY = end.y - start.y
+    const segmentLengthSquared = segmentX ** 2 + segmentY ** 2
+    const projection =
+      segmentLengthSquared === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              -(start.x * segmentX + start.y * segmentY) /
+                segmentLengthSquared,
+            ),
+          )
+    const nearestX = start.x + projection * segmentX
+    const nearestY = start.y + projection * segmentY
+    closest = Math.min(closest, Math.hypot(nearestX, nearestY))
+  }
+
+  return closest
+}
+
 function minutesFromMidnight(value) {
   const match = (value || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
   if (!match) return null
@@ -210,7 +261,7 @@ function distanceToTimeWindow(nowMinutes, leg) {
  * excluded.
  *
  * @param {{lat:number, lon:number, accuracy?:number}} position
- * @param {Array<{start: object|null, end: object|null}>} resolved
+ * @param {Array<{start: object|null, end: object|null, path?: object[]|null}>} resolved
  * @param {{
  *   doneIndexes?: Set<number>,
  *   legs?: Array<{timeOn?:string, timeOff?:string}>,
@@ -231,11 +282,12 @@ export function pickActiveLeg(position, resolved, opts = {}) {
   if (!position || !resolved?.length) return null
 
   const candidates = resolved
-    .map(({ start, end }, index) => {
+    .map(({ start, end, path }, index) => {
       if (doneIndexes.has(index)) return null
       const startDistance = distanceMeters(position, start)
       const endDistance = distanceMeters(position, end)
-      const distance = Math.min(startDistance, endDistance)
+      const pathDistance = distanceToPathMeters(position, path)
+      const distance = Math.min(startDistance, endDistance, pathDistance)
       if (!Number.isFinite(distance)) return null
 
       return {

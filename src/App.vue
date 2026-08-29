@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { parseTrip, SAMPLE_TRIP } from './parseTrip.js'
+import GoogleTripMap from './components/GoogleTripMap.vue'
 import TripCards from './components/TripCards.vue'
 import { useTripLocation } from './useTripLocation.js'
 
 const raw = ref('')
 const copied = ref(false)
 const showJson = ref(false)
+const showMap = ref(false)
 /** Paste panel open when empty; collapses once a trip is loaded. */
 const pasteOpen = ref(true)
 const doneIndexes = ref(new Set())
@@ -146,6 +148,15 @@ async function copyJson() {
           >
             {{ locationOn ? 'Location on' : 'Use location' }}
           </button>
+          <button
+            type="button"
+            class="btn ghost"
+            :aria-expanded="showMap"
+            aria-controls="trip-map"
+            @click="showMap = !showMap"
+          >
+            {{ showMap ? 'Hide map' : 'Show map' }}
+          </button>
           <button type="button" class="btn primary" @click="copyJson">
             {{ copied ? 'JSON copied' : 'Copy JSON' }}
           </button>
@@ -176,7 +187,9 @@ async function copyJson() {
       <p v-if="!hasTrip" class="empty">
         Paste an itinerary above, or load the sample to preview the card layout.
       </p>
-
+      <div v-if="hasTrip && showMap" id="trip-map">
+        <GoogleTripMap :legs="parsed.legs" />
+      </div>
       <TripCards
         v-else
         :legs="parsed.legs"
@@ -185,7 +198,6 @@ async function copyJson() {
         :location-enabled="locationOn"
         @done-change="updateDoneIndexes"
       />
-
       <pre
         v-if="hasTrip && showJson"
         id="json-panel"

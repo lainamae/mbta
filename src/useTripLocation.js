@@ -1,5 +1,6 @@
 import { onUnmounted, ref, shallowRef, watch } from 'vue'
 import { pickActiveLeg, resolveLegPlaces } from './mbtaLocation.js'
+import { getLegShapePath } from './mbtaShapes.js'
 
 /**
  * Browser geolocation + MBTA stop matching to find the active trip leg.
@@ -14,8 +15,10 @@ export function useTripLocation(legsRef, doneIndexesRef) {
   const resolving = ref(false)
 
   let watchId = null
+  let resolveVersion = 0
 
   async function resolveStops(legs) {
+    const version = ++resolveVersion
     if (!legs?.length) {
       resolved.value = []
       activeIndex.value = null
@@ -24,17 +27,38 @@ export function useTripLocation(legsRef, doneIndexesRef) {
     resolving.value = true
     statusMessage.value = 'Matching stops…'
     try {
-      resolved.value = await resolveLegPlaces(legs)
+      const legPlaces = await resolveLegPlaces(legs)
+      if (version !== resolveVersion) return
+
+      statusMessage.value = 'Matching route shapes…'
+      const resolvedLegs = []
+      for (let index = 0; index < legs.length; index++) {
+        let path = null
+        try {
+          path = await getLegShapePath(
+            legs[index],
+            legPlaces[index]?.start,
+            legPlaces[index]?.end,
+          )
+        } catch {
+          // Stop proximity remains available when a route shape cannot load.
+        }
+        if (version !== resolveVersion) return
+        resolvedLegs.push({ ...legPlaces[index], path })
+      }
+
+      resolved.value = resolvedLegs
       updateActive()
       if (enabled.value && position.value) {
         status.value = 'ready'
         statusMessage.value = activeLabel()
       }
     } catch (err) {
+      if (version !== resolveVersion) return
       status.value = 'error'
       statusMessage.value = err?.message || 'Could not look up stops'
     } finally {
-      resolving.value = false
+      if (version === resolveVersion) resolving.value = false
     }
   }
 
@@ -100,6 +124,7 @@ export function useTripLocation(legsRef, doneIndexesRef) {
   }
 
   function stop() {
+    resolveVersion++
     enabled.value = false
     if (watchId != null) {
       navigator.geolocation.clearWatch(watchId)
