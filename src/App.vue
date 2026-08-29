@@ -1,16 +1,44 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { parseTrip, SAMPLE_TRIP } from './parseTrip.js'
 import GoogleTripMap from './components/GoogleTripMap.vue'
 import TripCards from './components/TripCards.vue'
 import { useTripLocation } from './useTripLocation.js'
 
-const raw = ref('')
+const STORAGE_PREFIX = 'mbta-trip:'
+
+function readStored(name) {
+  try {
+    return localStorage.getItem(`${STORAGE_PREFIX}${name}`)
+  } catch {
+    return null
+  }
+}
+
+function readStoredBoolean(name, fallback) {
+  const value = readStored(name)
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return fallback
+}
+
+function saveStored(name, value) {
+  try {
+    const key = `${STORAGE_PREFIX}${name}`
+    if (value === '' || value == null) localStorage.removeItem(key)
+    else localStorage.setItem(key, String(value))
+  } catch {
+    // The app still works when storage is unavailable or full.
+  }
+}
+
+const savedRaw = readStored('itinerary') || ''
+const raw = ref(savedRaw)
 const copied = ref(false)
-const showJson = ref(false)
-const showMap = ref(false)
+const showJson = ref(readStoredBoolean('show-json', false))
+const showMap = ref(readStoredBoolean('show-map', false))
 /** Paste panel open when empty; collapses once a trip is loaded. */
-const pasteOpen = ref(true)
+const pasteOpen = ref(readStoredBoolean('paste-open', !savedRaw))
 const doneIndexes = ref(new Set())
 let copyTimer
 
@@ -26,12 +54,18 @@ const {
   statusMessage: locationMessage,
   position: currentPosition,
   activeIndex,
-  toggle: toggleLocation,
+  start: startLocation,
+  stop: stopLocation,
 } = useTripLocation(legs, doneIndexes)
 
 watch(raw, () => {
   copied.value = false
+  saveStored('itinerary', raw.value)
 })
+
+watch(showJson, (value) => saveStored('show-json', value))
+watch(showMap, (value) => saveStored('show-map', value))
+watch(pasteOpen, (value) => saveStored('paste-open', value))
 
 watch(hasTrip, (trip) => {
   if (trip) pasteOpen.value = false
@@ -40,9 +74,11 @@ watch(hasTrip, (trip) => {
   }
 })
 
-watch(hasTrip, (trip, wasTrip) => {
-  if (!trip && wasTrip && locationOn.value) {
-    toggleLocation()
+onMounted(() => {
+  // First visit requests permission. Later visits honor the saved choice.
+  if (readStoredBoolean('location-enabled', true)) {
+    saveStored('location-enabled', true)
+    startLocation()
   }
 })
 
@@ -57,6 +93,16 @@ function clearAll() {
 
 function updateDoneIndexes(indexes) {
   doneIndexes.value = indexes
+}
+
+function toggleLocationSetting() {
+  if (locationOn.value) {
+    stopLocation()
+    saveStored('location-enabled', false)
+  } else {
+    startLocation()
+    saveStored('location-enabled', locationOn.value)
+  }
 }
 
 async function copyJson() {
@@ -145,7 +191,7 @@ async function copyJson() {
             class="btn"
             :class="locationOn ? 'primary' : 'ghost'"
             :aria-pressed="locationOn"
-            @click="toggleLocation"
+            @click="toggleLocationSetting"
           >
             {{ locationOn ? 'Location on' : 'Use location' }}
           </button>
