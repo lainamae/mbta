@@ -2,18 +2,29 @@
 import { computed, ref, watch } from 'vue'
 import { parseTrip, SAMPLE_TRIP } from './parseTrip.js'
 import TripCards from './components/TripCards.vue'
+import { useTripLocation } from './useTripLocation.js'
 
 const raw = ref('')
 const copied = ref(false)
 const showJson = ref(false)
 /** Paste panel open when empty; collapses once a trip is loaded. */
 const pasteOpen = ref(true)
+const doneIndexes = ref(new Set())
 let copyTimer
 
 const parsed = computed(() => parseTrip(raw.value))
 const jsonText = computed(() => JSON.stringify(parsed.value, null, 2))
 const legCount = computed(() => parsed.value.legs.length)
 const hasTrip = computed(() => legCount.value > 0)
+const legs = computed(() => parsed.value.legs)
+
+const {
+  enabled: locationOn,
+  status: locationStatus,
+  statusMessage: locationMessage,
+  activeIndex,
+  toggle: toggleLocation,
+} = useTripLocation(legs, doneIndexes)
 
 watch(raw, () => {
   copied.value = false
@@ -21,7 +32,15 @@ watch(raw, () => {
 
 watch(hasTrip, (trip) => {
   if (trip) pasteOpen.value = false
-  else pasteOpen.value = true
+  else {
+    pasteOpen.value = true
+  }
+})
+
+watch(hasTrip, (trip, wasTrip) => {
+  if (!trip && wasTrip && locationOn.value) {
+    toggleLocation()
+  }
 })
 
 function loadSample() {
@@ -31,6 +50,10 @@ function loadSample() {
 function clearAll() {
   raw.value = ''
   pasteOpen.value = true
+}
+
+function updateDoneIndexes(indexes) {
+  doneIndexes.value = indexes
 }
 
 async function copyJson() {
@@ -114,6 +137,15 @@ async function copyJson() {
           <template v-else>No trip yet</template>
         </h2>
         <div v-if="hasTrip" class="actions" role="group" aria-label="Trip actions">
+          <button
+            type="button"
+            class="btn"
+            :class="locationOn ? 'primary' : 'ghost'"
+            :aria-pressed="locationOn"
+            @click="toggleLocation"
+          >
+            {{ locationOn ? 'Location on' : 'Use location' }}
+          </button>
           <button type="button" class="btn primary" @click="copyJson">
             {{ copied ? 'JSON copied' : 'Copy JSON' }}
           </button>
@@ -129,6 +161,18 @@ async function copyJson() {
         </div>
       </div>
 
+      <p
+        v-if="hasTrip && locationOn"
+        class="location-status"
+        role="status"
+        aria-live="polite"
+      >
+        {{ locationMessage }}
+        <span v-if="locationStatus === 'denied'" class="location-hint">
+          Enable location in browser settings to highlight your current leg.
+        </span>
+      </p>
+
       <p v-if="!hasTrip" class="empty">
         Paste an itinerary above, or load the sample to preview the card layout.
       </p>
@@ -137,6 +181,9 @@ async function copyJson() {
         v-else
         :legs="parsed.legs"
         :notes="parsed.notes"
+        :active-index="activeIndex"
+        :location-enabled="locationOn"
+        @done-change="updateDoneIndexes"
       />
 
       <pre
@@ -319,6 +366,25 @@ h1 {
 .empty {
   margin: 0;
   padding: 1.1rem 0.2rem;
+  color: var(--ink-muted);
+}
+
+.location-status {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.35rem;
+  background: #e8eefc;
+  border: 2px solid #b7c9f0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.location-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-weight: 500;
   color: var(--ink-muted);
 }
 

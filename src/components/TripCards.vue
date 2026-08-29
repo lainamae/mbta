@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
   legs: {
@@ -10,7 +10,19 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  /** Index of the leg location services thinks you are on. */
+  activeIndex: {
+    type: Number,
+    default: null,
+    validator: (v) => v === null || v === undefined || Number.isInteger(v),
+  },
+  locationEnabled: {
+    type: Boolean,
+    default: false,
+  },
 })
+
+const emit = defineEmits(['done-change'])
 
 /** Set of leg keys marked done (minimized). */
 const done = ref(new Set())
@@ -21,7 +33,18 @@ const tripFingerprint = computed(() =>
 
 watch(tripFingerprint, () => {
   done.value = new Set()
+  emit('done-change', new Set())
 })
+
+watch(
+  () => props.activeIndex,
+  async (index) => {
+    if (index == null || !props.locationEnabled) return
+    await nextTick()
+    const el = document.getElementById(`leg-card-${index}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  },
+)
 
 function legKey(leg, index) {
   return `${index}:${leg.route}:${leg.timeOn}`
@@ -37,6 +60,14 @@ function toggleDone(leg, index) {
   if (next.has(key)) next.delete(key)
   else next.add(key)
   done.value = next
+  emit(
+    'done-change',
+    new Set(
+      props.legs
+        .map((leg, legIndex) => (next.has(legKey(leg, legIndex)) ? legIndex : null))
+        .filter((index) => index != null),
+    ),
+  )
 }
 
 const doneCount = computed(() => done.value.size)
@@ -58,19 +89,27 @@ function lineTone(route) {
   <div class="trip">
     <p v-if="legs.length" class="progress" aria-live="polite">
       {{ doneCount }} of {{ legs.length }} done
+      <template v-if="locationEnabled && activeIndex != null">
+        · Current: leg {{ activeIndex + 1 }}
+      </template>
     </p>
 
     <ol v-if="legs.length" class="legs" aria-label="Trip legs">
       <li
         v-for="(leg, index) in legs"
+        :id="`leg-card-${index}`"
         :key="legKey(leg, index)"
         class="leg"
-        :class="{ done: isDone(leg, index) }"
+        :class="{
+          done: isDone(leg, index),
+          active: locationEnabled && activeIndex === index,
+        }"
         :data-line="lineTone(leg.route)"
       >
         <article
           class="card"
           :aria-labelledby="`leg-title-${index}`"
+          :aria-current="locationEnabled && activeIndex === index ? 'step' : undefined"
         >
           <div class="card-top">
             <label class="check">
@@ -89,6 +128,12 @@ function lineTone(route) {
                 <span class="sr-only">Leg </span>{{ index + 1 }}
                 <span class="sr-only"> of {{ legs.length }}</span>
                 <span v-if="isDone(leg, index)" class="sr-only">, done</span>
+                <span
+                  v-if="locationEnabled && activeIndex === index"
+                  class="now-badge"
+                >
+                  You are here
+                </span>
               </p>
               <h3 :id="`leg-title-${index}`" class="route">{{ leg.route }}</h3>
               <p v-if="isDone(leg, index)" class="mini-summary">
@@ -191,6 +236,30 @@ function lineTone(route) {
 }
 .leg.done[data-line] .card {
   border-left-color: var(--ok-ink);
+}
+
+.leg.active .card {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.22);
+  background: #f3f7ff;
+}
+
+.leg.active.done .card {
+  background: #eef5f1;
+}
+
+.now-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  background: var(--focus);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
 }
 
 .card-top {
