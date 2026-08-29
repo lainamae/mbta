@@ -24,6 +24,7 @@ const {
   enabled: locationOn,
   status: locationStatus,
   statusMessage: locationMessage,
+  position: currentPosition,
   activeIndex,
   toggle: toggleLocation,
 } = useTripLocation(legs, doneIndexes)
@@ -188,7 +189,10 @@ async function copyJson() {
         Paste an itinerary above, or load the sample to preview the card layout.
       </p>
       <div v-if="hasTrip && showMap" id="trip-map">
-        <GoogleTripMap :legs="parsed.legs" />
+        <GoogleTripMap
+          :legs="parsed.legs"
+          :current-position="locationOn ? currentPosition : null"
+        />
       </div>
       <TripCards
         v-else

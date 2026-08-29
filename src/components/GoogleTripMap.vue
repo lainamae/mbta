@@ -9,6 +9,10 @@ const props = defineProps({
     type: Array,
     required: true,
   },
+  currentPosition: {
+    type: Object,
+    default: null,
+  },
 })
 
 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
@@ -21,6 +25,8 @@ const walkingConnections = ref([])
 let map = null
 let markers = []
 let polylines = []
+let currentLocationMarker = null
+let AdvancedMarkerClass = null
 let renderVersion = 0
 
 const fingerprint = computed(() =>
@@ -118,6 +124,35 @@ function collectStops(resolved) {
   return [...byCoordinate.values()]
 }
 
+function updateCurrentLocationMarker() {
+  if (!map || !AdvancedMarkerClass) return
+
+  if (!props.currentPosition) {
+    if (currentLocationMarker) currentLocationMarker.map = null
+    currentLocationMarker = null
+    return
+  }
+
+  const position = asLatLng(props.currentPosition)
+  if (currentLocationMarker) {
+    currentLocationMarker.position = position
+    return
+  }
+
+  const markerContent = document.createElement('div')
+  markerContent.className = 'current-location-pin'
+  markerContent.setAttribute('aria-hidden', 'true')
+
+  currentLocationMarker = new AdvancedMarkerClass({
+    map,
+    position,
+    title: 'You are here',
+    content: markerContent,
+    gmpClickable: true,
+    zIndex: 1000,
+  })
+}
+
 async function renderMap() {
   const version = ++renderVersion
   error.value = ''
@@ -166,6 +201,7 @@ async function renderMap() {
       streetViewControl: false,
       fullscreenControl: true,
     })
+    AdvancedMarkerClass = AdvancedMarkerElement
 
     const bounds = new LatLngBounds()
     const stops = collectStops(resolved)
@@ -210,6 +246,7 @@ async function renderMap() {
         gmpClickable: true,
       })
     })
+    updateCurrentLocationMarker()
 
     const connections = []
     for (let index = 0; index < resolved.length - 1; index++) {
@@ -273,12 +310,15 @@ async function renderMap() {
 
 function cleanup() {
   renderVersion++
+  if (currentLocationMarker) currentLocationMarker.map = null
   markers.forEach((marker) => {
     marker.map = null
   })
   polylines.forEach((polyline) => polyline.setMap(null))
   markers = []
   polylines = []
+  currentLocationMarker = null
+  AdvancedMarkerClass = null
   map = null
 }
 
@@ -289,6 +329,14 @@ watch(
     renderMap()
   },
   { immediate: true },
+)
+
+watch(
+  () => [
+    props.currentPosition?.lat,
+    props.currentPosition?.lon,
+  ],
+  updateCurrentLocationMarker,
 )
 
 onBeforeUnmount(cleanup)
@@ -302,6 +350,10 @@ onBeforeUnmount(cleanup)
         <h2 id="trip-map-heading">Stops and walking connections</h2>
       </div>
       <div class="map-keys" aria-label="Map legend">
+        <span class="endpoint-key location-key">
+          <b><span class="location-dot" aria-hidden="true"></span></b>
+          You are here
+        </span>
         <span class="endpoint-key origin-key"><b>Start</b></span>
         <span class="endpoint-key transfer-key"><b>T1</b> Transfer</span>
         <span class="endpoint-key destination-key"><b>End</b></span>
@@ -427,6 +479,23 @@ h2 {
   text-align: center;
 }
 
+.location-key b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-color: #9cb9e8;
+}
+
+.location-dot {
+  display: block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: #0b57d0;
+  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.22);
+}
+
 .origin-key b {
   background: #176b45;
   border-color: #0d4c30;
@@ -519,6 +588,39 @@ h2 {
 :global(.trip-map-marker-label.is-destination) {
   border-color: #7f2f0e;
   background: #b3471a;
+}
+
+:global(.current-location-pin) {
+  position: relative;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #0b57d0;
+  box-shadow:
+    0 1px 5px rgba(20, 32, 51, 0.45),
+    0 0 0 8px rgba(11, 87, 208, 0.2);
+}
+
+:global(.current-location-pin::after) {
+  position: absolute;
+  inset: -0.55rem;
+  border: 2px solid rgba(11, 87, 208, 0.45);
+  border-radius: 50%;
+  content: '';
+  animation: location-pulse 2s ease-out infinite;
+}
+
+@keyframes location-pulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.65);
+  }
+  75%,
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
 }
 
 .map-message {
