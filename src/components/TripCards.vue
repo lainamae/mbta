@@ -224,7 +224,6 @@ function lineTone(route) {
 
 .leg.done .card {
   opacity: 0.72;
-  border-left-color: var(--ok-ink);
   background: #f5f8f5;
 }
 
@@ -249,18 +248,12 @@ function lineTone(route) {
 .leg[data-line='bus'] .card {
   border-left-color: #ffc72c;
 }
-.leg.done[data-line] .card {
-  border-left-color: var(--ok-ink);
-}
 
-.leg.active .card {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.22);
-  background: #f3f7ff;
-}
-
+.leg.active .card,
 .leg.selected .card {
-  border-color: var(--focus);
+  border-top-color: var(--focus);
+  border-right-color: var(--focus);
+  border-bottom-color: var(--focus);
   box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.22);
   background: #f3f7ff;
 }
