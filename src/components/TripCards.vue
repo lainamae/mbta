@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { isBusRouteLabel, routeIdFromLabel } from '../mbtaLocation.js'
 
 const props = defineProps({
   legs: {
@@ -19,6 +20,12 @@ const props = defineProps({
   locationEnabled: {
     type: Boolean,
     default: false,
+  },
+  /** Index of the leg selected from the trip map. */
+  selectedIndex: {
+    type: Number,
+    default: null,
+    validator: (v) => v === null || v === undefined || Number.isInteger(v),
   },
 })
 
@@ -75,12 +82,13 @@ const doneCount = computed(() => done.value.size)
 /** Visual cue only — route name remains the accessible label. */
 function lineTone(route) {
   const r = (route || '').toLowerCase()
+  if (routeIdFromLabel(route)?.startsWith('CR-')) return 'commuter-rail'
   if (r.includes('orange')) return 'orange'
   if (r.includes('blue')) return 'blue'
   if (r.includes('green')) return 'green'
   if (r.includes('red')) return 'red'
   if (r.includes('silver')) return 'silver'
-  if (/^\d+\s*[–-]/.test(route || '')) return 'bus'
+  if (isBusRouteLabel(route)) return 'bus'
   return 'other'
 }
 </script>
@@ -103,6 +111,7 @@ function lineTone(route) {
         :class="{
           done: isDone(leg, index),
           active: locationEnabled && activeIndex === index,
+          selected: selectedIndex === index,
         }"
         :data-line="lineTone(leg.route)"
       >
@@ -133,6 +142,9 @@ function lineTone(route) {
                   class="now-badge"
                 >
                   You are here
+                </span>
+                <span v-if="selectedIndex === index" class="selected-badge">
+                  Selected on map
                 </span>
               </p>
               <h3 :id="`leg-title-${index}`" class="route">{{ leg.route }}</h3>
@@ -231,6 +243,9 @@ function lineTone(route) {
 .leg[data-line='silver'] .card {
   border-left-color: #7c878e;
 }
+.leg[data-line='commuter-rail'] .card {
+  border-left-color: #80276c;
+}
 .leg[data-line='bus'] .card {
   border-left-color: #ffc72c;
 }
@@ -244,11 +259,31 @@ function lineTone(route) {
   background: #f3f7ff;
 }
 
+.leg.selected .card {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.22);
+  background: #f3f7ff;
+}
+
 .leg.active.done .card {
   background: #eef5f1;
 }
 
 .now-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  background: var(--focus);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.selected-badge {
   display: inline-block;
   margin-left: 0.45rem;
   padding: 0.2rem 0.45rem;

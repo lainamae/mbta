@@ -7,13 +7,30 @@ const API = 'https://api-v3.mbta.com'
 const routeStopsCache = new Map()
 const placeCache = new Map()
 
-/** @param {string} routeLabel e.g. "Orange Line – Oak Grove", "66 – Nubian via Allston" */
-export function routeIdFromLabel(routeLabel) {
-  const r = (routeLabel || '').trim()
-  const bus = r.match(/^(\d+)\s*[–-]/)
-  if (bus) return bus[1]
+const COMMUTER_RAIL_ROUTES = [
+  { id: 'CR-NewBedford', names: ['fall river/new bedford', 'new bedford', 'fall river'] },
+  { id: 'CR-Worcester', names: ['framingham/worcester', 'worcester', 'framingham'] },
+  { id: 'CR-Franklin', names: ['franklin/foxboro', 'franklin'] },
+  { id: 'CR-Newburyport', names: ['newburyport/rockport', 'newburyport', 'rockport'] },
+  { id: 'CR-Providence', names: ['providence/stoughton', 'providence', 'stoughton'] },
+  { id: 'CR-Fairmount', names: ['fairmount'] },
+  { id: 'CR-Fitchburg', names: ['fitchburg'] },
+  { id: 'CR-Greenbush', names: ['greenbush'] },
+  { id: 'CR-Haverhill', names: ['haverhill'] },
+  { id: 'CR-Kingston', names: ['kingston'] },
+  { id: 'CR-Lowell', names: ['lowell'] },
+  { id: 'CR-Needham', names: ['needham'] },
+  { id: 'CR-Foxboro', names: ['foxboro event service'] },
+]
 
+function singleRouteIdFromLabel(routeLabel) {
+  const r = (routeLabel || '').trim()
   const lower = r.toLowerCase()
+  const commuterRailRoute = COMMUTER_RAIL_ROUTES.find(({ names }) =>
+    names.some((name) => lower.includes(name)),
+  )
+  if (commuterRailRoute) return commuterRailRoute.id
+
   if (lower.includes('orange')) return 'Orange'
   if (lower.includes('blue')) return 'Blue'
   if (lower.includes('red')) return 'Red'
@@ -29,6 +46,33 @@ export function routeIdFromLabel(routeLabel) {
     return 'Green-D'
   }
   return null
+}
+
+/**
+ * @param {string} routeLabel e.g. "Orange Line – Oak Grove", "23 or 28 – Ruggles"
+ * @returns {string[]} MBTA route IDs to try (empty when unknown)
+ */
+export function routeIdsFromLabel(routeLabel) {
+  const r = (routeLabel || '').trim()
+  const orBus = r.match(/^(\d+(?:\s+or\s+\d+)+)\s*[–-]/i)
+  if (orBus) return orBus[1].split(/\s+or\s+/i).map((id) => id.trim())
+
+  const bus = r.match(/^(\d+)\s*[–-]/)
+  if (bus) return [bus[1]]
+
+  const single = singleRouteIdFromLabel(routeLabel)
+  return single ? [single] : []
+}
+
+/** @param {string} routeLabel e.g. "Orange Line – Oak Grove", "66 – Nubian via Allston" */
+export function routeIdFromLabel(routeLabel) {
+  return routeIdsFromLabel(routeLabel)[0] ?? null
+}
+
+/** True for numeric bus routes, including either-or labels like "23 or 28 – Ruggles". */
+export function isBusRouteLabel(routeLabel) {
+  const ids = routeIdsFromLabel(routeLabel)
+  return ids.length > 0 && ids.every((id) => /^\d+$/.test(id))
 }
 
 function normalizeName(name) {
@@ -96,18 +140,22 @@ async function fetchStopsForRoute(routeId) {
 
 /**
  * @param {string} place
- * @param {string|null} routeId
+ * @param {string|string[]|null} routeIdsInput
  * @returns {Promise<{lat: number, lon: number, name: string, score: number}|null>}
  */
-export async function resolvePlace(place, routeId) {
-  const key = `${routeId || ''}::${normalizeName(place)}`
+export async function resolvePlace(place, routeIdsInput) {
+  const routeIds = Array.isArray(routeIdsInput)
+    ? [...routeIdsInput]
+    : routeIdsInput
+      ? [routeIdsInput]
+      : []
+  const key = `${routeIds.join('|')}::${normalizeName(place)}`
   if (placeCache.has(key)) return placeCache.get(key)
 
   let best = null
-  const routeIds = routeId ? [routeId] : []
 
   // Green trunk: try sibling branches if exact branch sparse
-  if (routeId?.startsWith('Green-')) {
+  if (routeIds.some((id) => id?.startsWith('Green-'))) {
     for (const b of ['Green-B', 'Green-C', 'Green-D', 'Green-E']) {
       if (!routeIds.includes(b)) routeIds.push(b)
     }
@@ -157,10 +205,10 @@ export async function resolvePlace(place, routeId) {
 export async function resolveLegPlaces(legs) {
   const out = []
   for (const leg of legs) {
-    const routeId = routeIdFromLabel(leg.route)
+    const routeIds = routeIdsFromLabel(leg.route)
     const [start, end] = await Promise.all([
-      resolvePlace(leg.start, routeId),
-      resolvePlace(leg.end, routeId),
+      resolvePlace(leg.start, routeIds),
+      resolvePlace(leg.end, routeIds),
     ])
     out.push({
       start: start ? { lat: start.lat, lon: start.lon, matchedAs: start.name } : null,

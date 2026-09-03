@@ -1,4 +1,4 @@
-import { distanceMeters, routeIdFromLabel } from './mbtaLocation.js'
+import { distanceMeters, routeIdsFromLabel } from './mbtaLocation.js'
 
 const API = 'https://api-v3.mbta.com'
 const routeShapesCache = new Map()
@@ -92,15 +92,7 @@ function closestPointIndex(points, target) {
   return { index: bestIndex, distance: bestDistance }
 }
 
-/**
- * Find the route shape that best passes through this leg's two stops, then
- * return only the portion between them in the rider's direction.
- */
-export async function getLegShapePath(leg, start, end) {
-  const routeId = routeIdFromLabel(leg.route)
-  if (!routeId || !start || !end) return null
-
-  const shapes = await fetchRouteShapes(routeId)
+function bestShapeBetweenStops(shapes, start, end) {
   let best = null
 
   shapes.forEach((shape) => {
@@ -118,6 +110,38 @@ export async function getLegShapePath(leg, start, end) {
     }
   })
 
+  return best
+}
+
+function shapePathBetweenStops(best, start, end) {
+  const from = Math.min(best.startMatch.index, best.endMatch.index)
+  const to = Math.max(best.startMatch.index, best.endMatch.index)
+  let path = best.shape.points.slice(from, to + 1)
+  if (best.startMatch.index > best.endMatch.index) path = path.reverse()
+
+  // Use the resolved stop coordinates as exact endpoints so route and transfer
+  // lines meet their markers without a visual gap.
+  return [start, ...path, end]
+}
+
+/**
+ * Find the route shape that best passes through this leg's two stops, then
+ * return only the portion between them in the rider's direction.
+ */
+export async function getLegShapePath(leg, start, end) {
+  const routeIds = routeIdsFromLabel(leg.route)
+  if (!routeIds.length || !start || !end) return null
+
+  let best = null
+
+  for (const routeId of routeIds) {
+    const shapes = await fetchRouteShapes(routeId)
+    const candidate = bestShapeBetweenStops(shapes, start, end)
+    if (candidate && (!best || candidate.score < best.score)) {
+      best = candidate
+    }
+  }
+
   // A shape far from either stop is likely the wrong route variant.
   if (
     !best ||
@@ -127,12 +151,5 @@ export async function getLegShapePath(leg, start, end) {
     return null
   }
 
-  const from = Math.min(best.startMatch.index, best.endMatch.index)
-  const to = Math.max(best.startMatch.index, best.endMatch.index)
-  let path = best.shape.points.slice(from, to + 1)
-  if (best.startMatch.index > best.endMatch.index) path = path.reverse()
-
-  // Use the resolved stop coordinates as exact endpoints so route and transfer
-  // lines meet their markers without a visual gap.
-  return [start, ...path, end]
+  return shapePathBetweenStops(best, start, end)
 }

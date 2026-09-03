@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { parseTrip, SAMPLE_TRIP } from './parseTrip.js'
 import GoogleTripMap from './components/GoogleTripMap.vue'
 import TripCards from './components/TripCards.vue'
@@ -40,6 +40,7 @@ const showMap = ref(readStoredBoolean('show-map', false))
 /** Paste panel open when empty; collapses once a trip is loaded. */
 const pasteOpen = ref(readStoredBoolean('paste-open', !savedRaw))
 const doneIndexes = ref(new Set())
+const selectedLegIndex = ref(null)
 let copyTimer
 
 const parsed = computed(() => parseTrip(raw.value))
@@ -60,6 +61,7 @@ const {
 
 watch(raw, () => {
   copied.value = false
+  selectedLegIndex.value = null
   saveStored('itinerary', raw.value)
 })
 
@@ -93,6 +95,14 @@ function clearAll() {
 
 function updateDoneIndexes(indexes) {
   doneIndexes.value = indexes
+}
+
+async function showLegCard(index) {
+  selectedLegIndex.value = index
+  await nextTick()
+  document
+    .getElementById(`leg-card-${index}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 function toggleLocationSetting() {
@@ -204,18 +214,6 @@ async function copyJson() {
           >
             {{ showMap ? 'Hide map' : 'Show map' }}
           </button>
-          <button type="button" class="btn primary" @click="copyJson">
-            {{ copied ? 'JSON copied' : 'Copy JSON' }}
-          </button>
-          <button
-            type="button"
-            class="btn ghost"
-            :aria-expanded="showJson"
-            aria-controls="json-panel"
-            @click="showJson = !showJson"
-          >
-            {{ showJson ? 'Hide JSON' : 'Show JSON' }}
-          </button>
         </div>
       </div>
 
@@ -238,13 +236,14 @@ async function copyJson() {
         <GoogleTripMap
           :legs="parsed.legs"
           :current-position="locationOn ? currentPosition : null"
+          @leg-select="showLegCard"
         />
       </div>
       <TripCards
-        v-else
         :legs="parsed.legs"
         :notes="parsed.notes"
         :active-index="activeIndex"
+        :selected-index="selectedLegIndex"
         :location-enabled="locationOn"
         @done-change="updateDoneIndexes"
       />
@@ -448,6 +447,10 @@ h1 {
   margin-top: 0.25rem;
   font-weight: 500;
   color: var(--ink-muted);
+}
+
+#trip-map {
+  margin-bottom: 1rem;
 }
 
 .json {

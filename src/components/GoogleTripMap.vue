@@ -1,7 +1,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { configureGoogleMaps } from '../googleMapsLoader.js'
-import { distanceMeters, resolveLegPlaces } from '../mbtaLocation.js'
+import {
+  distanceMeters,
+  isBusRouteLabel,
+  resolveLegPlaces,
+  routeIdFromLabel,
+} from '../mbtaLocation.js'
 import { getLegShapePath } from '../mbtaShapes.js'
 
 const props = defineProps({
@@ -14,6 +19,8 @@ const props = defineProps({
     default: null,
   },
 })
+
+const emit = defineEmits(['leg-select'])
 
 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID'
@@ -51,12 +58,13 @@ function asLatLng(point) {
 
 function routeColor(route) {
   const value = (route || '').toLowerCase()
+  if (routeIdFromLabel(route)?.startsWith('CR-')) return '#80276c'
   if (value.includes('orange')) return '#ed8b00'
   if (value.includes('blue')) return '#003da5'
   if (value.includes('green')) return '#00843d'
   if (value.includes('red') || value.includes('mattapan')) return '#da291c'
   if (value.includes('silver')) return '#6f777b'
-  if (/^\d+\s*[–-]/.test(route || '')) return '#b07800'
+  if (isBusRouteLabel(route)) return '#ffc72c'
   return '#4f5d75'
 }
 
@@ -219,8 +227,11 @@ async function renderMap() {
         strokeColor: routeColor(props.legs[index].route),
         strokeOpacity: 0.9,
         strokeWeight: 7,
+        clickable: true,
+        cursor: 'pointer',
         zIndex: 1,
       })
+      polyline.addListener('click', () => emit('leg-select', index))
       polylines.push(polyline)
     })
 
@@ -270,7 +281,7 @@ async function renderMap() {
         const routePolylines = route.createPolylines()
         routePolylines.forEach((polyline) => {
           polyline.setOptions({
-            strokeColor: '#6f3fa0',
+            strokeColor: '#d81b60',
             strokeOpacity: 0.9,
             strokeWeight: 5,
             zIndex: 2,
@@ -388,7 +399,7 @@ onBeforeUnmount(cleanup)
         ref="mapElement"
         class="map"
         role="region"
-        :aria-label="`Map showing stops for ${legs.length} trip legs`"
+        :aria-label="`Map showing stops for ${legs.length} trip legs. Select a route line to show its trip card.`"
       ></div>
 
       <div class="walks">
@@ -513,7 +524,7 @@ h2 {
 
 .walk-line {
   width: 1.8rem;
-  border-top: 4px solid #6f3fa0;
+  border-top: 4px solid #d81b60;
   border-radius: 99px;
 }
 
@@ -668,8 +679,8 @@ code {
 .walks li {
   padding: 0.75rem;
   border-radius: 0.35rem;
-  background: #f3edf8;
-  border-left: 0.35rem solid #6f3fa0;
+  background: #fff0f5;
+  border-left: 0.35rem solid #d81b60;
 }
 
 .walk-route,
