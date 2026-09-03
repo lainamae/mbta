@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { isBusRouteLabel, routeIdFromLabel } from '../mbtaLocation.js'
+import { isBusRouteLabel, isSilverLineLabel, routeIdFromLabel } from '../mbtaLocation.js'
 
 const props = defineProps({
   legs: {
@@ -87,7 +87,7 @@ function lineTone(route) {
   if (r.includes('blue')) return 'blue'
   if (r.includes('green')) return 'green'
   if (r.includes('red')) return 'red'
-  if (r.includes('silver')) return 'silver'
+  if (r.includes('silver') || isSilverLineLabel(route)) return 'silver'
   if (isBusRouteLabel(route)) return 'bus'
   return 'other'
 }

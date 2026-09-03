@@ -23,6 +23,16 @@ const COMMUTER_RAIL_ROUTES = [
   { id: 'CR-Foxboro', names: ['foxboro event service'] },
 ]
 
+const SILVER_LINE_ROUTES = [
+  { id: '741', key: 'sl1' },
+  { id: '742', key: 'sl2' },
+  { id: '743', key: 'sl3' },
+  { id: '751', key: 'sl4' },
+  { id: '749', key: 'sl5' },
+  { id: '746', key: 'slw' },
+]
+const SILVER_LINE_IDS = SILVER_LINE_ROUTES.map(({ id }) => id)
+
 function singleRouteIdFromLabel(routeLabel) {
   const r = (routeLabel || '').trim()
   const lower = r.toLowerCase()
@@ -35,7 +45,6 @@ function singleRouteIdFromLabel(routeLabel) {
   if (lower.includes('blue')) return 'Blue'
   if (lower.includes('red')) return 'Red'
   if (lower.includes('mattapan')) return 'Mattapan'
-  if (lower.includes('silver')) return '741' // SL1 common; may need multi
   if (lower.includes('green')) {
     const branch = r.match(/Green Line\s*[–-]\s*([A-E])/i)
     if (branch) return `Green-${branch[1].toUpperCase()}`
@@ -60,8 +69,24 @@ export function routeIdsFromLabel(routeLabel) {
   const bus = r.match(/^(\d+)\s*[–-]/)
   if (bus) return [bus[1]]
 
+  const silver = silverLineIdsFromLabel(routeLabel)
+  if (silver.length) return silver
+
   const single = singleRouteIdFromLabel(routeLabel)
   return single ? [single] : []
+}
+
+function silverLineIdsFromLabel(routeLabel) {
+  const r = (routeLabel || '').trim()
+  const ids = []
+  for (const match of r.matchAll(/\bsl\s*([1-5]|w)\b/gi)) {
+    const key = `sl${match[1].toLowerCase()}`
+    const route = SILVER_LINE_ROUTES.find((item) => item.key === key)
+    if (route && !ids.includes(route.id)) ids.push(route.id)
+  }
+  if (ids.length) return ids
+  if (r.toLowerCase().includes('silver')) return [...SILVER_LINE_IDS]
+  return []
 }
 
 /** @param {string} routeLabel e.g. "Orange Line – Oak Grove", "66 – Nubian via Allston" */
@@ -69,8 +94,14 @@ export function routeIdFromLabel(routeLabel) {
   return routeIdsFromLabel(routeLabel)[0] ?? null
 }
 
+/** True for Silver Line labels such as "SL4 – Nubian Station". */
+export function isSilverLineLabel(routeLabel) {
+  return silverLineIdsFromLabel(routeLabel).length > 0
+}
+
 /** True for numeric bus routes, including either-or labels like "23 or 28 – Ruggles". */
 export function isBusRouteLabel(routeLabel) {
+  if (isSilverLineLabel(routeLabel)) return false
   const ids = routeIdsFromLabel(routeLabel)
   return ids.length > 0 && ids.every((id) => /^\d+$/.test(id))
 }
@@ -158,6 +189,13 @@ export async function resolvePlace(place, routeIdsInput) {
   if (routeIds.some((id) => id?.startsWith('Green-'))) {
     for (const b of ['Green-B', 'Green-C', 'Green-D', 'Green-E']) {
       if (!routeIds.includes(b)) routeIds.push(b)
+    }
+  }
+
+  // Silver Line corridors overlap (SL4/SL5 on Washington St, SL1/SL2/SL3 in the tunnel).
+  if (routeIds.some((id) => SILVER_LINE_IDS.includes(id))) {
+    for (const id of SILVER_LINE_IDS) {
+      if (!routeIds.includes(id)) routeIds.push(id)
     }
   }
 

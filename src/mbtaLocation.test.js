@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   isBusRouteLabel,
+  isSilverLineLabel,
   routeIdFromLabel,
   routeIdsFromLabel,
 } from './mbtaLocation.js'
@@ -35,6 +36,22 @@ test('keeps existing subway and bus route matching', () => {
   assert.equal(routeIdFromLabel('Green Line – D, Riverside'), 'Green-D')
 })
 
+test('resolves Silver Line variant labels to the matching MBTA route IDs', () => {
+  assert.equal(routeIdFromLabel('SL4 – Nubian Station'), '751')
+  assert.equal(routeIdFromLabel('Silver Line SL4 – Nubian Station'), '751')
+  assert.equal(routeIdFromLabel('SL1 – Logan Airport Terminals'), '741')
+  assert.equal(routeIdFromLabel('SL5 – Temple Place'), '749')
+  assert.deepEqual(routeIdsFromLabel('SL4 or SL5 – Nubian Station'), ['751', '749'])
+  assert.deepEqual(routeIdsFromLabel('Silver Line – South Station'), [
+    '741',
+    '742',
+    '743',
+    '751',
+    '749',
+    '746',
+  ])
+})
+
 test('resolves either-or bus route labels to all route IDs', () => {
   assert.deepEqual(routeIdsFromLabel('23 or 28 – Ruggles'), ['23', '28'])
   assert.deepEqual(routeIdsFromLabel('23 or 28 - Ruggles'), ['23', '28'])
@@ -46,4 +63,11 @@ test('isBusRouteLabel identifies single and either-or bus routes', () => {
   assert.equal(isBusRouteLabel('23 or 28 – Ruggles'), true)
   assert.equal(isBusRouteLabel('Orange Line – Oak Grove'), false)
   assert.equal(isBusRouteLabel('Fairmount Line – Readville'), false)
+  assert.equal(isBusRouteLabel('SL4 – Nubian Station'), false)
+})
+
+test('isSilverLineLabel recognizes SL variant labels', () => {
+  assert.equal(isSilverLineLabel('SL4 – Nubian Station'), true)
+  assert.equal(isSilverLineLabel('Silver Line SL1 – South Station'), true)
+  assert.equal(isSilverLineLabel('66 – Nubian via Allston'), false)
 })

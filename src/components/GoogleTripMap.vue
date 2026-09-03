@@ -4,6 +4,7 @@ import { configureGoogleMaps } from '../googleMapsLoader.js'
 import {
   distanceMeters,
   isBusRouteLabel,
+  isSilverLineLabel,
   resolveLegPlaces,
   routeIdFromLabel,
 } from '../mbtaLocation.js'
@@ -63,7 +64,7 @@ function routeColor(route) {
   if (value.includes('blue')) return '#003da5'
   if (value.includes('green')) return '#00843d'
   if (value.includes('red') || value.includes('mattapan')) return '#da291c'
-  if (value.includes('silver')) return '#6f777b'
+  if (value.includes('silver') || isSilverLineLabel(route)) return '#6f777b'
   if (isBusRouteLabel(route)) return '#ffc72c'
   return '#4f5d75'
 }
